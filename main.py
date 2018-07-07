@@ -166,10 +166,105 @@ class NE163Spider(FinanceSpider):
         with open(filePath, 'wb') as f:
             f.write(text)
 
+    def ParseHData(self, path):
+        hdata = {}
+        minDate = None
+        maxDate = None
+        with open(path, 'r') as f:
+            cLine = 0
+            for line in f:
+                cLine += 1
+                if cLine == 1:
+                    continue
+                items = line.split(',')
+                dt = items[0]
+                tclose = float(items[3])
+                topen = float(items[6])
+                if minDate == None:
+                    minDate = dt
+                elif dt < minDate:
+                    minDate = dt
+
+                if maxDate == None:
+                    maxDate = dt
+                elif dt > maxDate:
+                    maxDate = dt
+
+                hdata[dt] = {'DATE': dt, 'TCLOSE':tclose, 'TOPEN':topen}
+            hdata['minDate'] = minDate
+            hdata['maxDate'] = maxDate
+        return hdata
+
 class FinanceStrategy(object):
-    def Proc(self, start):
+    def addMonths(self, dt, months):
+        ''' 取months个月后的1号 '''
+        month = dt.month - 1 + months
+        year = dt.year + int(month / 12)
+        month = month % 12 + 1
+        return datetime.datetime(year, month, 1)
+
+    def getUpRoundDate(self, dt, hdata):
+        hmaxDate = hdata['maxDate']
+        while dt.strftime('%Y-%m-%d') not in hdata:
+            dt = dt + datetime.timedelta(days=1)
+            if dt.strftime('%Y-%m-%d') > hmaxDate:
+                logging.error('Failed to get UP Round date. dt=%s maxdate=%s' % (dt.strftime('%Y-%m-%d'), hmaxDate))
+                return None
+        return dt
+
+    def getHData(self, start, end, intervalMonths, hdata):
+        hminDate = hdata['minDate']
+        hmaxDate = hdata['maxDate']
+        while start.strftime('%Y-%m-%d') < hminDate:
+            start = start + datetime.timedelta(days=1)
+        start = self.getUpRoundDate(start, hdata)
+
+        retHData = []
+
+        if start is None:
+            return retHData
+
+        while end.strftime('%Y-%m-%d') > hmaxDate:
+            end = end - datetime.timedelta(days=1)
+        end = self.getUpRoundDate(end, hdata)
+
+
+        dt = start
+        while dt < end:
+            hdItem = hdata[dt.strftime('%Y-%m-%d')]
+            retHData.append(hdItem)
+            dt = self.addMonths(dt, 1)
+            dt = self.getUpRoundDate(dt, hdata)
+            if dt is None:
+                break
+
+        return retHData
+
+    def ProcDingtou(self, stockSymbol, start, end):
+        ''' 对于股票stockSymbol，从start到end，每个月固定定投，计算到end时的损益率 '''
         fs = NE163Spider()
-        filePath = fs.GetStockHDataPathBySymbol('000300')
+        hdataFilePath = fs.GetStockHDataPathBySymbol(stockSymbol)
+        fullHData = fs.ParseHData(hdataFilePath)
+
+        hdata = self.getHData(start, end, 1, fullHData)
+        for i in hdata:
+            logging.debug(i)
+
+        tcloseOnEnd = hdata[-1]['TCLOSE']
+        cInput = 0.0
+        cOutput = 0.0
+        for hItem in hdata:
+            tclose = hItem['TCLOSE']
+            hItem['INPUT'] = 1.0
+            cInput += hItem['INPUT']
+            hItem['OUTPUT'] = 1.0 * tcloseOnEnd / tclose
+            cOutput += hItem['OUTPUT']
+
+        deltaRate = (cOutput - cInput) * 100.0 / cInput
+        nYear = (end - start).days / 365.0
+        compoundDeltaRate = (pow(cOutput / cInput, 1/nYear) - 1) * 100.0
+
+        return {'start':hdata[0]['DATE'], 'end':hdata[-1]['DATE'], 'cInput':cInput, 'cOutput':cOutput, 'deltaRate':deltaRate, 'compoundDeltaRate':compoundDeltaRate}
 
 class StockHelper(unittest.TestCase):
     def tcGetCnHData(self):
@@ -179,9 +274,15 @@ class StockHelper(unittest.TestCase):
 
     def tcAnalyze(self):
         fs = FinanceStrategy()
-        start = datetime.datetime(2002, 1, 4)
-        end = datetime.datetime.now()
-        fs.Proc(start)
+        msg = ''
+        start = datetime.datetime(2016, 1, 1)
+        end = datetime.datetime(2018, 7, 1)
+        result = fs.ProcDingtou('000300', start, end)
+        msg += '[%s, %s] ' % (result['start'], result['end'])
+        msg += '总投入: %.2f，总产出: %.2f，总收益率: %.2f%%，' % (result['cInput'], result['cOutput'], result['deltaRate'])
+        msg += '年复合收益率: %.2f%%' % (result['compoundDeltaRate'])
+        msg += '\n'
+        logging.info(msg)
 
 if __name__ == '__main__':
     logFmt = '%(asctime)s %(lineno)04d %(levelname)-8s %(message)s'
