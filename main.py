@@ -12,6 +12,10 @@ import urllib.request
 import tushare as ts
 import re
 import datetime
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from matplotlib.dates import strpdate2num
+import numpy as np
 
 class DLFilings(unittest.TestCase):
     # 根据urllist.json从www.sec.gov下载财报数据
@@ -283,6 +287,30 @@ class StockHelper(unittest.TestCase):
         msg += '年复合收益率: %.2f%%' % (result['compoundDeltaRate'])
         msg += '\n'
         logging.info(msg)
+
+    def tcShowHS300(self):
+        fig = plt.figure()
+        ax = fig.add_subplot(1, 1, 1) # nRows, nCols, nFig 将画布分割成 nRows × nCols，本图像画在从左到右从上到下的第nFig块
+        fig.suptitle('HS300', fontsize=14, fontweight='bold')
+        ax.set_xlabel('Time')
+        ax.set_ylabel('TClose')
+        fs = NE163Spider()
+        stockSymbol = '000300'
+        hdataFilePath = fs.GetStockHDataPathBySymbol(stockSymbol)
+        myGetDate = lambda astr:mdates.strpdate2num("%Y-%m-%d")(astr.decode())
+        dt, tclose = np.loadtxt(hdataFilePath, delimiter=',', unpack=True, converters={0:myGetDate}, 
+            skiprows=1, usecols=(0, 3))
+
+        ax.plot(dt, tclose)
+
+        # ax.xaxis.set_major_locator(mdates.DayLocator(bymonthday=range(1, 32), interval=15))
+        # ax.xaxis.set_major_locator(mdates.MonthLocator(interval=6))
+        ax.xaxis.set_major_locator(mdates.YearLocator())
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+        for label in ax.xaxis.get_ticklabels():
+            label.set_rotation(45)
+
+        plt.show()
 
 if __name__ == '__main__':
     logFmt = '%(asctime)s %(lineno)04d %(levelname)-8s %(message)s'
