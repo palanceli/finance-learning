@@ -101,3 +101,7 @@ ENV/
 .mypy_cache/
 
 finance163/
+financeData/financeYahoo/hdata/QQQ.csv
+financeData/financeYahoo/hdata/SPY.csv
+financeData/finance16320180708.zip
+financeData/financeYahoo20180708.zip

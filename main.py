@@ -98,7 +98,7 @@ class FinanceSpider(object):
 
 class NE163Spider(FinanceSpider):
     def __init__(self):
-        FinanceSpider.__init__(self, './finance163')
+        FinanceSpider.__init__(self, './financeData/finance163')
 
     ''' 抓取网易财经的股票信息 '''
     def getMarketRadar(self, page, count):
@@ -170,20 +170,31 @@ class NE163Spider(FinanceSpider):
         with open(filePath, 'wb') as f:
             f.write(text)
 
-    def ParseHData(self, path):
+class HDataParser(object):
+    def __init__(self, path):
+        self.path = path
+        self.hdata = self.parseHData()
+
+    def addMonths(self, dt, months):
+        ''' 取months个月后的1号 '''
+        month = dt.month - 1 + months
+        year = dt.year + int(month / 12)
+        month = month % 12 + 1
+        return datetime.datetime(year, month, 1)
+
+    def doParseHDataByCol(self, dateCol, closeCol):
         hdata = {}
         minDate = None
         maxDate = None
-        with open(path, 'r') as f:
+        with open(self.path, 'r') as f:
             cLine = 0
             for line in f:
                 cLine += 1
                 if cLine == 1:
                     continue
                 items = line.split(',')
-                dt = items[0]
-                tclose = float(items[3])
-                topen = float(items[6])
+                dt = items[dateCol]
+                tclose = float(items[closeCol])
                 if minDate == None:
                     minDate = dt
                 elif dt < minDate:
@@ -194,65 +205,74 @@ class NE163Spider(FinanceSpider):
                 elif dt > maxDate:
                     maxDate = dt
 
-                hdata[dt] = {'DATE': dt, 'TCLOSE':tclose, 'TOPEN':topen}
+                hdata[dt] = {'DATE': dt, 'TCLOSE':tclose}
             hdata['minDate'] = minDate
             hdata['maxDate'] = maxDate
         return hdata
 
-class FinanceStrategy(object):
-    def addMonths(self, dt, months):
-        ''' 取months个月后的1号 '''
-        month = dt.month - 1 + months
-        year = dt.year + int(month / 12)
-        month = month % 12 + 1
-        return datetime.datetime(year, month, 1)
+    def parseHData(self):
+        hdata = {'2018-01-01': {'DATE': '2018-01-01', 'TCLOSE':0.0, 'TOPEN':0.1},
+            'maxDate':'2018-01-01',
+            'minDate':'2018-01-01'
+        }
+        return hdata
 
-    def getUpRoundDate(self, dt, hdata):
-        hmaxDate = hdata['maxDate']
-        while dt.strftime('%Y-%m-%d') not in hdata:
+    def getUpRoundDate(self, dt):
+        ''' 向上取圆整：在self.hdata中找到距离dt最近的日期 '''
+        hmaxDate = self.hdata['maxDate']
+        while dt.strftime('%Y-%m-%d') not in self.hdata:
             dt = dt + datetime.timedelta(days=1)
             if dt.strftime('%Y-%m-%d') > hmaxDate:
-                logging.error('Failed to get UP Round date. dt=%s maxdate=%s' % (dt.strftime('%Y-%m-%d'), hmaxDate))
                 return None
         return dt
 
-    def getHData(self, start, end, intervalMonths, hdata):
-        hminDate = hdata['minDate']
-        hmaxDate = hdata['maxDate']
-        while start.strftime('%Y-%m-%d') < hminDate:
-            start = start + datetime.timedelta(days=1)
-        start = self.getUpRoundDate(start, hdata)
+    def ExtraceData(self, start, end, intervalMonths):
+        ''' 从start 到end，每隔intervalMonths个月抽取一条数据 '''
+        hminDate = self.hdata['minDate']
+        hmaxDate = self.hdata['maxDate']
+        start = self.getUpRoundDate(start)
 
         retHData = []
 
         if start is None:
             return retHData
 
-        while end.strftime('%Y-%m-%d') > hmaxDate:
-            end = end - datetime.timedelta(days=1)
-        end = self.getUpRoundDate(end, hdata)
-
+        if end.strftime('%Y-%m-%d') > hmaxDate:
+            end = datetime.datetime.strptime(hmaxDate, '%Y-%m-%d')
+        end = self.getUpRoundDate(end)
 
         dt = start
         while dt < end:
-            hdItem = hdata[dt.strftime('%Y-%m-%d')]
+            hdItem = self.hdata[dt.strftime('%Y-%m-%d')]
             retHData.append(hdItem)
             dt = self.addMonths(dt, 1)
-            dt = self.getUpRoundDate(dt, hdata)
+            dt = self.getUpRoundDate(dt)
             if dt is None:
                 break
 
         return retHData
 
-    def ProcDingtou(self, stockSymbol, start, end):
-        ''' 对于股票stockSymbol，从start到end，每个月固定定投，计算到end时的损益率 '''
+class HDParser163(HDataParser):
+    def __init__(self, symbol):
         fs = NE163Spider()
-        hdataFilePath = fs.GetStockHDataPathBySymbol(stockSymbol)
-        fullHData = fs.ParseHData(hdataFilePath)
+        hdataFilePath = fs.GetStockHDataPathBySymbol(symbol)
+        HDataParser.__init__(self, hdataFilePath)
 
-        hdata = self.getHData(start, end, 1, fullHData)
-        for i in hdata:
-            logging.debug(i)
+    def parseHData(self):
+        return self.doParseHDataByCol(0, 3)
+
+class HDParserYahoo(HDataParser):
+    def __init__(self, symbol):
+        path = './financeData/financeYahoo/hdata/%s.csv' % symbol
+        HDataParser.__init__(self, path)
+
+    def parseHData(self):
+        return self.doParseHDataByCol(0, 5)
+
+class Dingtou(object):
+    def Main(self, hdataParser, start, end):
+        ''' 对于股票stockSymbol，从start到end，每个月固定定投，计算到end时的损益率 '''
+        hdata = hdataParser.ExtraceData(start, end, 1)
 
         tcloseOnEnd = hdata[-1]['TCLOSE']
         cInput = 0.0
@@ -270,23 +290,111 @@ class FinanceStrategy(object):
 
         return {'start':hdata[0]['DATE'], 'end':hdata[-1]['DATE'], 'cInput':cInput, 'cOutput':cOutput, 'deltaRate':deltaRate, 'compoundDeltaRate':compoundDeltaRate}
 
+    def Group2Now(self, hdataParser, startYear):
+        ''' 以[startYear, 2017)中的每年为起点，求到今天定投hdataParser的收益率 '''
+        nowYear = 2018
+        for i in range(startYear, nowYear):
+            msg = ''
+            start = datetime.datetime(i, 1, 1)
+            end = datetime.datetime.today()
+            result = self.Main(hdataParser, start, end)
+            msg += '[%s, %s] ' % (result['start'], result['end'])
+            msg += '总投入: %-8.2f 总产出: %-8.2f 总收益率: %6.2f%%   ' % (result['cInput'], result['cOutput'], result['deltaRate'])
+            msg += '年复合收益率: %6.2f%%' % (result['compoundDeltaRate'])
+            logging.info(msg)
+
+    def GroupToYear(self, hdataParser, startYear, nYear):
+        ''' 以[startYear, nowYear - nYear)中的每年为起点，求3年定投hdataParser的收益率 '''
+        for i in range(startYear, 2019 - nYear):
+            msg = ''
+            start = datetime.datetime(i, 1, 1)
+            end = datetime.datetime(i + nYear, 1, 1)
+            end = datetime.datetime.today()
+            result = self.Main(hdataParser, start, end)
+            msg += '[%s, %s] ' % (result['start'], result['end'])
+            msg += '总投入: %-8.2f 总产出: %-8.2f 总收益率: %6.2f%%   ' % (result['cInput'], result['cOutput'], result['deltaRate'])
+            msg += '年复合收益率: %6.2f%%' % (result['compoundDeltaRate'])
+            logging.info(msg)
+
 class StockHelper(unittest.TestCase):
     def tcGetCnHData(self):
         ''' 获取中国A股的历史数据 '''
         fs = NE163Spider()
         fs.Run()
 
-    def tcAnalyze(self):
-        fs = FinanceStrategy()
-        msg = ''
-        start = datetime.datetime(2016, 1, 1)
-        end = datetime.datetime(2018, 7, 1)
-        result = fs.ProcDingtou('000300', start, end)
-        msg += '[%s, %s] ' % (result['start'], result['end'])
-        msg += '总投入: %.2f，总产出: %.2f，总收益率: %.2f%%，' % (result['cInput'], result['cOutput'], result['deltaRate'])
-        msg += '年复合收益率: %.2f%%' % (result['compoundDeltaRate'])
-        msg += '\n'
-        logging.info(msg)
+    def tcQQQDingtou2Now(self):
+        ''' 以[1993, 2017)中的每年为起点，求到今天定投纳斯达克100的收益率 '''
+        hdataParser = HDParserYahoo('QQQ')
+        dingtou = Dingtou()
+        dingtou.Group2Now(hdataParser, 1999)
+
+    def tcQQQDingtou3(self):
+        ''' 以[1993, 2016)中的每年为起点，求3年定投投纳斯达克100的收益率 '''
+        hdataParser = HDParserYahoo('QQQ')
+        dingtou = Dingtou()
+        dingtou.GroupToYear(hdataParser, 1999, 3)
+
+
+    def tcQQQDingtou5(self):
+        ''' 以[1993, 2014)中的每年为起点，求5年定投纳斯达克100的收益率 '''
+        hdataParser = HDParserYahoo('QQQ')
+        dingtou = Dingtou()
+        dingtou.GroupToYear(hdataParser, 1999, 5)
+
+    def tcQQQDingtou10(self):
+        ''' 以[1993, 2009)中的每年为起点，求10年定投纳斯达克100的收益率 '''
+        hdataParser = HDParserYahoo('QQQ')
+        dingtou = Dingtou()
+        dingtou.GroupToYear(hdataParser, 1999, 10)
+
+    def tcSPYDingtou2Now(self):
+        ''' 以[1993, 2017)中的每年为起点，求到今天定投标普500的收益率 '''
+        hdataParser = HDParserYahoo('SPY')
+        dingtou = Dingtou()
+        dingtou.Group2Now(hdataParser, 1993)
+
+    def tcSPYDingtou3(self):
+        ''' 以[1993, 2016)中的每年为起点，求3年定投标普500的收益率 '''
+        hdataParser = HDParserYahoo('SPY')
+        dingtou = Dingtou()
+        dingtou.GroupToYear(hdataParser, 1993, 3)
+
+
+    def tcSPYDingtou5(self):
+        ''' 以[1993, 2014)中的每年为起点，求5年定投标普500的收益率 '''
+        hdataParser = HDParserYahoo('SPY')
+        dingtou = Dingtou()
+        dingtou.GroupToYear(hdataParser, 1993, 5)
+
+    def tcSPYDingtou10(self):
+        ''' 以[1993, 2009)中的每年为起点，求10年定投标普500的收益率 '''
+        hdataParser = HDParserYahoo('SPY')
+        dingtou = Dingtou()
+        dingtou.GroupToYear(hdataParser, 1993, 10)
+
+    def tcHS300Dingtou2Now(self):
+        ''' 以[2002, 2017)中的每年为起点，求到今天定投沪深300的收益率 '''
+        hdataParser = HDParser163('000300')
+        dingtou = Dingtou()
+        dingtou.Group2Now(hdataParser, 2002)
+
+    def tcHS300Dingtou3(self):
+        ''' 以[2002, 2016)中的每年为起点，求3年定投沪深300的收益率 '''
+        hdataParser = HDParser163('000300')
+        dingtou = Dingtou()
+        dingtou.GroupToYear(hdataParser, 2002, 3)
+
+    def tcHS300Dingtou5(self):
+        ''' 以[2002, 2014)中的每年为起点，求5年定投沪深300的收益率 '''
+        hdataParser = HDParser163('000300')
+        dingtou = Dingtou()
+        dingtou.GroupToYear(hdataParser, 2002, 5)
+
+    def tcHS300Dingtou10(self):
+        ''' 以[2002, 2009)中的每年为起点，求10年定投沪深300的收益率 '''
+        hdataParser = HDParser163('000300')
+        dingtou = Dingtou()
+        dingtou.GroupToYear(hdataParser, 2002, 10)
 
     def tcShowHS300(self):
         fig = plt.figure()
