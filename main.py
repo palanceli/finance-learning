@@ -171,9 +171,13 @@ class NE163Spider(FinanceSpider):
             f.write(text)
 
 class HDataParser(object):
-    def __init__(self, path):
+    def __init__(self, path, symbol):
         self.path = path
         self.hdata = self.parseHData()
+        self.symbol = symbol
+
+    def GetStockSymbol(self):
+        return self.symbol
 
     def addMonths(self, dt, months):
         ''' 取months个月后的1号 '''
@@ -252,25 +256,37 @@ class HDataParser(object):
 
         return retHData
 
+    def doGetDtAndTCloseAsFloat(self, dtCol, tcloseCol):
+        myGetDate = lambda astr:mdates.strpdate2num("%Y-%m-%d")(astr.decode())
+        dt, tclose = np.loadtxt(self.path, delimiter=',', unpack=True, converters={0:myGetDate}, 
+            skiprows=1, usecols=(dtCol, tcloseCol))
+        return dt, tclose
+
 class HDParser163(HDataParser):
     def __init__(self, symbol):
         fs = NE163Spider()
         hdataFilePath = fs.GetStockHDataPathBySymbol(symbol)
-        HDataParser.__init__(self, hdataFilePath)
+        HDataParser.__init__(self, hdataFilePath, symbol)
 
     def parseHData(self):
         return self.doParseHDataByCol(0, 3)
 
+    def GetDtAndTCloseAsFloat(self):
+        return self.doGetDtAndTCloseAsFloat(0, 3)
+
 class HDParserYahoo(HDataParser):
     def __init__(self, symbol):
         path = './financeData/financeYahoo/hdata/%s.csv' % symbol
-        HDataParser.__init__(self, path)
+        HDataParser.__init__(self, path, symbol)
 
     def parseHData(self):
         return self.doParseHDataByCol(0, 5)
 
+    def GetDtAndTCloseAsFloat(self):
+        return self.doGetDtAndTCloseAsFloat(0, 5)
+
 class Dingtou(object):
-    def Main(self, hdataParser, start, end):
+    def invest(self, hdataParser, start, end):
         ''' 对于股票stockSymbol，从start到end，每个月固定定投，计算到end时的损益率 '''
         hdata = hdataParser.ExtraceData(start, end, 1)
 
@@ -297,24 +313,82 @@ class Dingtou(object):
             msg = ''
             start = datetime.datetime(i, 1, 1)
             end = datetime.datetime.today()
-            result = self.Main(hdataParser, start, end)
+            result = self.invest(hdataParser, start, end)
             msg += '[%s, %s] ' % (result['start'], result['end'])
             msg += '总投入: %-8.2f 总产出: %-8.2f 总收益率: %6.2f%%   ' % (result['cInput'], result['cOutput'], result['deltaRate'])
             msg += '年复合收益率: %6.2f%%' % (result['compoundDeltaRate'])
             logging.info(msg)
 
     def GroupToYear(self, hdataParser, startYear, nYear):
-        ''' 以[startYear, nowYear - nYear)中的每年为起点，求3年定投hdataParser的收益率 '''
+        ''' 以[startYear, nowYear - nYear)中的每年为起点，求nYear年定投hdataParser的收益率 '''
         for i in range(startYear, 2019 - nYear):
             msg = ''
             start = datetime.datetime(i, 1, 1)
             end = datetime.datetime(i + nYear, 1, 1)
-            end = datetime.datetime.today()
-            result = self.Main(hdataParser, start, end)
+            result = self.invest(hdataParser, start, end)
             msg += '[%s, %s] ' % (result['start'], result['end'])
             msg += '总投入: %-8.2f 总产出: %-8.2f 总收益率: %6.2f%%   ' % (result['cInput'], result['cOutput'], result['deltaRate'])
             msg += '年复合收益率: %6.2f%%' % (result['compoundDeltaRate'])
             logging.info(msg)
+
+    def investAndStand(self, hdataParser, investStart, investEnd, standEnd):
+        ''' 对于股票stockSymbol，从investStart到investEnd，每个月固定定投，之后不再投入，计算到standEnd时的损益率 '''
+        hdata = hdataParser.ExtraceData(investStart, investEnd, 1)
+        standEnd = hdataParser.getUpRoundDate(standEnd)
+        if standEnd == None:
+            standEnd = datetime.datetime.strptime(hdataParser.hdata['maxDate'], '%Y-%m-%d')
+
+        tcloseOnEnd = hdata[standEnd.strftime('%Y-%m-%d')]['TCLOSE']
+        cInput = 0.0
+        cOutput = 0.0
+        for hItem in hdata:
+            tclose = hItem['TCLOSE']
+            hItem['INPUT'] = 1.0
+            cInput += hItem['INPUT']
+            hItem['OUTPUT'] = 1.0 * tcloseOnEnd / tclose
+            cOutput += hItem['OUTPUT']
+
+        deltaRate = (cOutput - cInput) * 100.0 / cInput
+        nYear = (end - start).days / 365.0
+        compoundDeltaRate = (pow(cOutput / cInput, 1/nYear) - 1) * 100.0
+
+        return {'start':hdata[0]['DATE'], 'end':hdata[-1]['DATE'], 'cInput':cInput, 'cOutput':cOutput, 'deltaRate':deltaRate, 'compoundDeltaRate':compoundDeltaRate}
+
+
+    def GroupInvestAndStand(self, hdataParser, startYear, nInvestYear, nStandYear):
+        ''' 以[startYear, nowYear - nYear)中的每年为起点，求nYear年定投hdataParser，之后nStandYear不再投入的收益率 '''
+        
+        for i in range(startYear, 2019 - nInvestYear - nStandYear):
+            msg = ''
+            investStart = datetime.datetime(i, 1, 1)
+            investEnd = datetime.datetime(i + nInvestYear, 1, 1)
+            standEnd = datetime.datetime(i + nInvestYear + nStandYear)
+            result = self.invest(hdataParser, investStart, investEnd, standEnd)
+            msg += '[%s, %s] ' % (result['start'], result['end'])
+            msg += '总投入: %-8.2f 总产出: %-8.2f 总收益率: %6.2f%%   ' % (result['cInput'], result['cOutput'], result['deltaRate'])
+            msg += '年复合收益率: %6.2f%%' % (result['compoundDeltaRate'])
+            logging.info(msg)
+
+class FinanceFigure(object):
+    def ShowFigure(self, hdataParser):
+        fig = plt.figure()
+        ax = fig.add_subplot(1, 1, 1) # nRows, nCols, nFig 将画布分割成 nRows × nCols，本图像画在从左到右从上到下的第nFig块
+        fig.suptitle(hdataParser.GetStockSymbol(), fontsize=14, fontweight='bold')
+        ax.set_xlabel('Time')
+        ax.set_ylabel('TClose')
+        dt, tclose = hdataParser.GetDtAndTCloseAsFloat()
+
+        ax.plot(dt, tclose)
+
+        # ax.xaxis.set_major_locator(mdates.DayLocator(bymonthday=range(1, 32), interval=15))
+        # ax.xaxis.set_major_locator(mdates.MonthLocator(interval=6))
+        ax.xaxis.set_major_locator(mdates.YearLocator())
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+        for label in ax.xaxis.get_ticklabels():
+            label.set_rotation(45)
+
+        plt.show()
+
 
 class StockHelper(unittest.TestCase):
     def tcGetCnHData(self):
@@ -327,6 +401,12 @@ class StockHelper(unittest.TestCase):
         hdataParser = HDParserYahoo('QQQ')
         dingtou = Dingtou()
         dingtou.Group2Now(hdataParser, 1999)
+
+    def tcQQQDingtou2(self):
+        ''' 以[1993, 2016)中的每年为起点，求2年定投投纳斯达克100的收益率 '''
+        hdataParser = HDParserYahoo('QQQ')
+        dingtou = Dingtou()
+        dingtou.GroupToYear(hdataParser, 1999, 2)
 
     def tcQQQDingtou3(self):
         ''' 以[1993, 2016)中的每年为起点，求3年定投投纳斯达克100的收益率 '''
@@ -359,6 +439,12 @@ class StockHelper(unittest.TestCase):
         dingtou = Dingtou()
         dingtou.GroupToYear(hdataParser, 1993, 3)
 
+    def tcSPYDingtou2(self):
+        ''' 以[1993, 2016)中的每年为起点，求2年定投标普500的收益率 '''
+        hdataParser = HDParserYahoo('SPY')
+        dingtou = Dingtou()
+        dingtou.GroupToYear(hdataParser, 1993, 2)
+
 
     def tcSPYDingtou5(self):
         ''' 以[1993, 2014)中的每年为起点，求5年定投标普500的收益率 '''
@@ -384,6 +470,12 @@ class StockHelper(unittest.TestCase):
         dingtou = Dingtou()
         dingtou.GroupToYear(hdataParser, 2002, 3)
 
+    def tcHS300Dingtou2(self):
+        ''' 以[2002, 2016)中的每年为起点，求2年定投沪深300的收益率 '''
+        hdataParser = HDParser163('000300')
+        dingtou = Dingtou()
+        dingtou.GroupToYear(hdataParser, 2002, 2)
+
     def tcHS300Dingtou5(self):
         ''' 以[2002, 2014)中的每年为起点，求5年定投沪深300的收益率 '''
         hdataParser = HDParser163('000300')
@@ -397,28 +489,19 @@ class StockHelper(unittest.TestCase):
         dingtou.GroupToYear(hdataParser, 2002, 10)
 
     def tcShowHS300(self):
-        fig = plt.figure()
-        ax = fig.add_subplot(1, 1, 1) # nRows, nCols, nFig 将画布分割成 nRows × nCols，本图像画在从左到右从上到下的第nFig块
-        fig.suptitle('HS300', fontsize=14, fontweight='bold')
-        ax.set_xlabel('Time')
-        ax.set_ylabel('TClose')
-        fs = NE163Spider()
-        stockSymbol = '000300'
-        hdataFilePath = fs.GetStockHDataPathBySymbol(stockSymbol)
-        myGetDate = lambda astr:mdates.strpdate2num("%Y-%m-%d")(astr.decode())
-        dt, tclose = np.loadtxt(hdataFilePath, delimiter=',', unpack=True, converters={0:myGetDate}, 
-            skiprows=1, usecols=(0, 3))
+        hdataParser = HDParser163('000300')
+        ff = FinanceFigure()
+        ff.ShowFigure(hdataParser)
 
-        ax.plot(dt, tclose)
-
-        # ax.xaxis.set_major_locator(mdates.DayLocator(bymonthday=range(1, 32), interval=15))
-        # ax.xaxis.set_major_locator(mdates.MonthLocator(interval=6))
-        ax.xaxis.set_major_locator(mdates.YearLocator())
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-        for label in ax.xaxis.get_ticklabels():
-            label.set_rotation(45)
-
-        plt.show()
+    def tcShowQQQ(self):
+        hdataParser = HDParserYahoo('QQQ')
+        ff = FinanceFigure()
+        ff.ShowFigure(hdataParser)
+        
+    def tcShowSPY(self):
+        hdataParser = HDParserYahoo('SPY')
+        ff = FinanceFigure()
+        ff.ShowFigure(hdataParser)
 
 if __name__ == '__main__':
     logFmt = '%(asctime)s %(lineno)04d %(levelname)-8s %(message)s'
