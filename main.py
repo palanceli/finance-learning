@@ -387,66 +387,6 @@ class FinanceFigure(object):
 
         plt.show()
 
-class RealTimeFinanceSpider(object):
-    def __init__(self):
-        self.qlist = {'SOGO':{'name':'搜狗', 'symbol':'SOGO', 'qqfinanceid':'usSOGO'},
-        '01810.HK':{'name':'小米', 'symbol':'01810.HK', 'qqfinanceid':'r_hk01810'},
-        'SPY':{'name':'标普500', 'symbol':'SPY', 'qqfinanceid':'usSPY'},
-        'QQQ':{'name':'纳斯达克100', 'symbol':'QQQ', 'qqfinanceid':'usQQQ'},
-        '000300':{'name':'沪深300', 'symbol':'000300', 'qqfinanceid':'sh000300'},
-        '050002':{'name':'博时沪深', 'symbol':'050002', 'qqfinanceid':'s_jj050002'}
-        }
-
-    def Run(self):
-        pass
-
-class QQRTFinanceSplider(RealTimeFinanceSpider):
-    def Run(self):
-        urlstr = 'http://sqt.gtimg.cn/utf8/q='
-        urlparamstr = ''
-        for k, v in self.qlist.items():
-            if len(urlparamstr) > 0:
-                urlparamstr += ','
-            urlparamstr += v['qqfinanceid']
-        urlstr += urlparamstr
-        text = urllib.request.urlopen(urlstr).read().decode('utf-8')
-
-        self.parseResponse(text)
-
-        csvstr = '代号,名称,最新价格\n'
-        for k, v in self.qlist.items():
-            symbol = v['symbol']
-            name = v['name']
-            lastestPrice = v['lastestPrice']
-            csvstr += '"%s","%s",%.4f\n' % (symbol, name, lastestPrice)
-
-        with open('rtprice.csv', 'w') as f:
-            f.write(csvstr)
-
-        logging.info(self.qlist)
-
-    def parseResponse(self, requeststr):
-        items = requeststr.split(';')
-        for i in items:
-            i = i.strip()
-            if len(i) == 0:
-                continue
-            logging.info(i)
-            k, v = i.split('=')
-            responseID = k
-            lastestPrice = float(v.split('~')[3])
-            self.updateLastestPrice(responseID, lastestPrice)
-
-    def requestID2responsID(self, requestID):
-        return 'v_' + requestID
-
-    def updateLastestPrice(self, responseID, lastestPrice):
-        for k, v in self.qlist.items():
-            requestID = v['qqfinanceid']
-            if responseID == self.requestID2responsID(requestID):
-                v['lastestPrice'] = lastestPrice
-                return v
-
 class StockHelper(unittest.TestCase):
     def tcGetCnHData(self):
         ''' 获取中国A股的历史数据 '''
@@ -559,10 +499,6 @@ class StockHelper(unittest.TestCase):
         hdataParser = HDParserYahoo('SPY')
         ff = FinanceFigure()
         ff.ShowFigure(hdataParser)
-
-    def tcShowRT(self):
-        rtfs = QQRTFinanceSplider()
-        rtfs.Run()
 
 if __name__ == '__main__':
     logFmt = '%(asctime)s %(lineno)04d %(levelname)-8s %(message)s'
