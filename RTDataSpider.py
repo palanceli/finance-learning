@@ -8,7 +8,6 @@ import json
 import bs4
 import urllib
 import urllib.request
-import tushare as ts
 import re
 import datetime
 import matplotlib.pyplot as plt
@@ -29,7 +28,7 @@ class RTDataSpider(object):
 
 class QQRTDataSplider(RTDataSpider):
     def __init__(self):
-        RTData.__init__(self)
+        RTDataSpider.__init__(self)
         self.rtData = [
         {'name':'搜狗',           'symbol':'SOGO',        'rtData':0.0, 'requestid':'usSOGO'},
         {'name':'小米',           'symbol':'01810.HK',    'rtData':0.0, 'requestid':'r_hk01810'},
@@ -37,12 +36,24 @@ class QQRTDataSplider(RTDataSpider):
         {'name':'纳斯达克100',     'symbol':'QQQ',         'rtData':0.0, 'requestid':'usQQQ'},
         {'name':'沪深300',        'symbol':'000300',      'rtData':0.0, 'requestid':'sh000300'},
         {'name':'博时沪深',        'symbol':'050002',      'rtData':0.0, 'requestid':'s_jj050002'},
+        {'name':'SHV美一年国债ETF',            'symbol':'SHV',         'rtData':0.0, 'requestid':'usSHV'},
+        {'name':'SHY美三年国债ETF',            'symbol':'SHY',         'rtData':0.0, 'requestid':'usSHY'},
+        {'name':'IEI美七年国债ETF',            'symbol':'IEI',         'rtData':0.0, 'requestid':'usIEI'},
+        {'name':'IEF美十年国债ETF',            'symbol':'IEF',         'rtData':0.0, 'requestid':'usIEF'},
+        {'name':'TLT美二十年国债ETF',           'symbol':'TLT',         'rtData':0.0, 'requestid':'usTLT'},
+        {'name':'GSY主动货基短债',             'symbol':'GSY',         'rtData':0.0, 'requestid':'usGSY'},
+        {'name':'VGSH',                      'symbol':'VGSH',        'rtData':0.0, 'requestid':'usVGSH'},
+        {'name':'Pimco Etf Trust Enhanced Short Maturity Etf',         'symbol':'MINT',        'rtData':0.0, 'requestid':'usMINT'},
+        {'name':'Ishares Short Maturity Bond Etf',           'symbol':'NEAR',        'rtData':0.0, 'requestid':'usNEAR'},
+        {'name':'LQD美国企业债指数',            'symbol':'LQD',         'rtData':0.0, 'requestid':'usLQD'},
+
+        {'name':'MUB',            'symbol':'MUB',         'rtData':0.0, 'requestid':'usMUB'},
         ]
 
     def Run(self):
         urlstr = 'http://sqt.gtimg.cn/utf8/q='
         urlparamstr = ''
-        for item in rtData:
+        for item in self.rtData:
             if len(urlparamstr) > 0:
                 urlparamstr += ','
             urlparamstr += item['requestid']
@@ -67,23 +78,23 @@ class QQRTDataSplider(RTDataSpider):
         return 'v_' + requestID
 
     def updateRTData(self, responseID, lastestPrice):
-        for k, v in self.qlist.items():
-            requestID = v['requestid']
+        for item in self.rtData:
+            requestID = item['requestid']
             if responseID == self.requestID2responsID(requestID):
-                v['rtData'] = lastestPrice
-                return v
+                item['rtData'] = lastestPrice
+                return item
 
-class StockHelper(unittest.TestCase):
-    def tcShowRT(self):
+class RTDataAPP(unittest.TestCase):
+    def appSaveRTData(self):
         csvPath = 'rtdata.csv'
-        rtfs = QQRTFinanceSplider()
-        rtData = rtfs.Run()
+        rtds = QQRTDataSplider()
+        rtData = rtds.Run()
 
         csvstr = '代号,名称,最新价格\n'
         for item in rtData:
-            symbol = v['symbol']
-            name = v['name']
-            lastestPrice = v['rtData']
+            symbol = item['symbol']
+            name = item['name']
+            lastestPrice = item['rtData']
             csvstr += '"%s","%s",%.4f\n' % (symbol, name, lastestPrice)
 
         with open(csvPath, 'w') as f:
