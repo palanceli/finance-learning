@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.dates import strpdate2num
 import numpy as np
+import time
 
 class DLFilings(unittest.TestCase):
     # 根据urllist.json从www.sec.gov下载财报数据
@@ -177,6 +178,43 @@ class YahooSpider(HDataSpider):
 
     def GetStockCodeList(self):
         url = 'http://quote.eastmoney.com/usstocklist.html'
+        htmlText = urllib.request.urlopen(url).read().decode('gbk')
+        matchedItems = re.findall('<li><a target="_blank" href="(.+?)" title="(.+?)">(.+?)\((.+?)\)</a></li>', htmlText)
+        stockCodeList = []
+        for i in matchedItems:
+            stockCodeList.append({'CODE':i[3], 'SYMBOL':i[3], 'NAME':i[1]})
+        return stockCodeList
+
+    def DownloadStockHData(self, stockCodeInfo, hdataDir, notProcessIfHDataExists=False):
+        ''' 下载个股的历史数据 '''
+        code = stockCodeInfo['CODE']
+        filePath = '%s.txt' % os.path.join(hdataDir, code)
+        if notProcessIfHDataExists and os.path.exists(filePath): # 如果文件已存在就不再下载了
+            logging.debug('%s exists escape.' % (filePath))
+            return
+
+        url = 'https://finance.yahoo.com/quote/%s/history?period1=631123200&period2=%d&interval=1d&filter=history&frequency=1d' % (code, time.time())
+        logging.debug('downloading %s: %s => %s' % (code, url, filePath))
+        response = urllib.request.urlopen(url)
+        if response.getcode() != 200:
+            logging.error('Failed to download %s: %s => %s, return code=%d' % (code, url, filePath, response.getcode()))
+            return
+        text = response.read().decode('utf-8')
+        
+        startStr = '"HistoricalPriceStore":{"prices":'
+        pos = text.find(startStr)
+        if pos > 0:
+            text = text[pos + len(startStr):]
+        endStr = ',"isPending":'
+        pos = text.find(endStr)
+        text = text[:pos]
+
+        if len(text) < 500:
+            logging.error('Failed to download %s: %s => %s' % (code, url, filePath))
+            return
+
+        with open(filePath, 'wb') as f:
+            f.write(text.encode('utf-8'))
 
 class HDataParser(object):
     def __init__(self, path, symbol):
@@ -398,6 +436,10 @@ class FinanceFigure(object):
         plt.show()
 
 class StockHelper(unittest.TestCase):
+    def tcTest(self):
+        hDataSpider = YahooSpider()
+        hDataSpider.Run()
+
     def tcGetCnHData(self):
         ''' 获取中国A股的历史数据 '''
         fs = NE163Spider()
