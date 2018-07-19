@@ -195,9 +195,10 @@ class YahooSpider(HDataSpider):
 
         url = 'https://finance.yahoo.com/quote/%s/history?period1=631123200&period2=%d&interval=1d&filter=history&frequency=1d' % (code, time.time())
         logging.debug('downloading %s: %s => %s' % (code, url, filePath))
-        response = urllib.request.urlopen(url)
-        if response.getcode() != 200:
-            logging.error('Failed to download %s: %s => %s, return code=%d' % (code, url, filePath, response.getcode()))
+        try:
+            response = urllib.request.urlopen(url)
+        except:
+            logging.error('Failed to download %s: %s => %s' % (code, url, filePath))
             return
         text = response.read().decode('utf-8')
         
