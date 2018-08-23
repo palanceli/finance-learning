@@ -32,6 +32,7 @@ class QQRTDataSplider(RTDataSpider):
         self.rtData = [
         {'name':'搜狗',           'symbol':'SOGO',        'rtData':0.0, 'requestid':'usSOGO'},
         {'name':'小米',           'symbol':'01810.HK',    'rtData':0.0, 'requestid':'r_hk01810'},
+        {'name':'腾讯',           'symbol':'700.HK',         'rtData':0.0, 'requestid':'r_hk00700'},
         {'name':'标普500',        'symbol':'SPY',         'rtData':0.0, 'requestid':'usSPY'},
         {'name':'纳斯达克100',     'symbol':'QQQ',         'rtData':0.0, 'requestid':'usQQQ'},
         {'name':'沪深300',        'symbol':'000300',      'rtData':0.0, 'requestid':'sh000300'},
