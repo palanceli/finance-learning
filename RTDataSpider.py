@@ -9,7 +9,6 @@ import urllib
 import urllib.request
 import re
 import datetime
-import numpy as np
 
 class RTDataSpider(object):
     def __init__(self):
