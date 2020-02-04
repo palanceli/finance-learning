@@ -34,6 +34,8 @@ class QQRTDataSplider(RTDataSpider):
         {'name':'JD',             'symbol':'JD',         'rtData':0.0, 'requestid':'usJD'},
         {'name':'APPLE',          'symbol':'APPLE',     'rtData':0.0, 'requestid':'usAAPL'},
         {'name':'小米',           'symbol':'01810.HK',    'rtData':0.0, 'requestid':'r_hk01810'},
+        {'name':'恒指ETF',        'symbol':'02833.HK',    'rtData':0.0, 'requestid':'r_hk02833'},
+        {'name':'阿里巴巴',        'symbol':'09988.HK',    'rtData':0.0, 'requestid':'r_hk09988'},
         {'name':'腾讯',           'symbol':'700.HK',      'rtData':0.0, 'requestid':'r_hk00700'},
         {'name':'美团',           'symbol':'3690.HK',     'rtData':0.0, 'requestid':'r_hk03690'},
         {'name':'波司登',          'symbol':'3998.HK',     'rtData':0.0, 'requestid':'r_hk03998'},
