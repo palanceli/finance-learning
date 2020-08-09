@@ -27,6 +27,7 @@ class QQRTDataSplider(RTDataSpider):
         self.rtData = [
         {'name':'搜狗',           'symbol':'SOGO',        'rtData':0.0, 'requestid':'usSOGO'},
         {'name':'AMD',           'symbol':'AMD',         'rtData':0.0, 'requestid':'usAMD'},
+        {'name':'蔚来',           'symbol':'NIO',         'rtData':0.0, 'requestid':'usNIO'},
         {'name':'TSLA',           'symbol':'TSLA',       'rtData':0.0, 'requestid':'usTSLA'},
         {'name':'NTES',           'symbol':'NTES',       'rtData':0.0, 'requestid':'usNTES'},
         {'name':'BABA',           'symbol':'BABA',       'rtData':0.0, 'requestid':'usBABA'},
