@@ -40,6 +40,7 @@ class QQRTDataSplider(RTDataSpider):
         {'name':'腾讯',           'symbol':'700.HK',      'rtData':0.0, 'requestid':'r_hk00700'},
         {'name':'美团',           'symbol':'3690.HK',     'rtData':0.0, 'requestid':'r_hk03690'},
         {'name':'波司登',          'symbol':'3998.HK',     'rtData':0.0, 'requestid':'r_hk03998'},
+        {'name':'农夫山泉',        'symbol':'9633.HK',     'rtData':0.0, 'requestid':'r_hk09633'},
         {'name':'标普500',        'symbol':'SPY',         'rtData':0.0, 'requestid':'usSPY'},
         {'name':'纳斯达克100',     'symbol':'QQQ',         'rtData':0.0, 'requestid':'usQQQ'},
         {'name':'沪深300',        'symbol':'000300',      'rtData':0.0, 'requestid':'sh000300'},
